@@ -1,11 +1,53 @@
-alias k-logout='op signout && unset KUBE_DATA_CACHE && unalias k && echo "Logged out and cache cleared."'
+[[ -z "$ORIGINAL_PS1" ]] && ORIGINAL_PS1="$PS1"
+
+############################################################
+# Kubernetes runtime config
+############################################################
+
+export KUBE_RUNTIME_CONFIG="/tmp/kube_runtime_config"
+
+(( $+aliases[k] )) && unalias k
+(( $+aliases[kctx] )) && unalias kctx
+(( $+aliases[kns] )) && unalias kns
+
+k() {
+  command kubectl "$@" --kubeconfig "$KUBE_RUNTIME_CONFIG"
+}
+
+kctx() {
+  KUBECONFIG="$KUBE_RUNTIME_CONFIG" command kubectx "$@"
+}
+
+kns() {
+  KUBECONFIG="$KUBE_RUNTIME_CONFIG" command kubens "$@"
+}
+
+############################################################
+# logout
+############################################################
+
+k-logout() {
+  op signout
+  unset KUBE_DATA_CACHE
+  rm -f "$KUBE_RUNTIME_CONFIG"
+  echo "Logged out and cache cleared."
+}
+
+############################################################
+# kubeconfig selector (1Password)
+############################################################
 
 k-select() {
   unsetopt nomatch
   set -o noglob
 
   local raw_list=$'ID\tTITLE\tVAULT\tTAGS\n'
-  raw_list+=$(op item list --tags k8s-config --format json | jq -r '.[] | "\(.id)\t\(.title)\t\(.vault.name)\t\(.tags | join(","))"' | sort -k2 -t$'\t')
+
+  raw_list+=$(
+    op item list --tags k8s-config --format json |
+    jq -r '.[] | "\(.id)\t\(.title)\t\(.vault.name)\t\(.tags | join(","))"' |
+    sort -k2 -t$'\t'
+  )
 
   local selection=$(echo "$raw_list" | fzf --tabstop=30 --header-lines=1 --reverse --inline-info)
 
@@ -18,6 +60,7 @@ k-select() {
   printf "Loading config for: %s\n" "$item_title"
 
   local raw_data
+
   raw_data=$(op read "op://$vault_name/$item_id/k8s config" 2>/dev/null)
 
   if [[ -z "$raw_data" ]]; then
@@ -25,9 +68,12 @@ k-select() {
   fi
 
   if [[ -z "$raw_data" ]]; then
-    local file_id=$(op item get "$item_id" --format json | grep -oE '"files" ?: ?\[\{"id" ?: ?"[^"]+"' | cut -d'"' -f8)
+    local file_id=$(op item get "$item_id" --format json |
+      grep -oE '"files" ?: ?\[\{"id" ?: ?"[^"]+"' |
+      cut -d'"' -f8)
+
     if [[ -n "$file_id" ]]; then
-        raw_data=$(op read "op://$vault_name/$item_id/$file_id" 2>/dev/null)
+      raw_data=$(op read "op://$vault_name/$item_id/$file_id" 2>/dev/null)
     fi
   fi
 
@@ -37,8 +83,12 @@ k-select() {
     return 1
   fi
 
+
   export KUBE_DATA_CACHE="$raw_data"
-  alias k='kubectl --kubeconfig <(echo "$KUBE_DATA_CACHE")'
+
+  echo "$KUBE_DATA_CACHE" > "$KUBE_RUNTIME_CONFIG"
+
+  export PS1="$item_title - $ORIGINAL_PS1"
 
   printf "Success! Context set for: %s\n" "$item_title"
 
@@ -46,34 +96,49 @@ k-select() {
   setopt nomatch
 }
 
+############################################################
+# SSH key selector (1Password)
+############################################################
+
 ssh-select() {
   unsetopt nomatch
   set -o noglob
 
   local raw_list=$'ID\tTITLE\tVAULT\tTAGS\n'
-  raw_list+=$(op item list --tags ssh-key --format json | jq -r '.[] | "\(.id)\t\(.title)\t\(.vault.name)\t\(.tags | join(","))"' | sort -k2 -t$'\t')
+
+  raw_list+=$(
+    op item list --tags ssh-key --format json |
+    jq -r '.[] | "\(.id)\t\(.title)\t\(.vault.name)\t\(.tags | join(","))"' |
+    sort -k2 -t$'\t'
+  )
 
   local selection=$(echo "$raw_list" | fzf --reverse --inline-info --tabstop=30 --header-lines=1)
+
   [[ -z "$selection" ]] && { set +o noglob; return 1; }
 
   local item_id=$(echo "$selection" | awk '{print $1}')
   local item_title=$(op item get "$item_id" --format json | jq -r '.title')
+
   local clean_title=$(echo "$item_title" | tr ' /' '__' | tr -cd '[:alnum:]_')
 
   echo "Adding key: $item_title"
 
   local tmp_k="/tmp/${clean_title}"
 
-  op item get "$item_id" --reveal --format json | jq -r '.fields[] | select(.id=="private_key" or .label=="private key").value' > "$tmp_k"
+  op item get "$item_id" --reveal --format json |
+    jq -r '.fields[] | select(.id=="private_key" or .label=="private key").value' > "$tmp_k"
 
   if [[ ! -s "$tmp_k" ]]; then
     echo "Error: Key not found"
     rm -f "$tmp_k"
-    set +o noglob; return 1
+    set +o noglob
+    return 1
   fi
 
   chmod 600 "$tmp_k"
+
   ssh-add -t 1h "$tmp_k"
+
   rm -f "$tmp_k"
 
   set +o noglob
