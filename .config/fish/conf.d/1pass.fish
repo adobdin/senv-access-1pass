@@ -94,6 +94,7 @@ function ssh-select
     set selection (
         op item list --tags ssh-key --format json |
         jq -r '.[] | [.id, .title, .vault.id, .vault.name, (.tags|join(","))] | @tsv' |
+        sort -k2 |
         fzf --delimiter='\t' --with-nth=2,4,5 --tabstop=30 --reverse --inline-info
     )
 
@@ -101,7 +102,7 @@ function ssh-select
         return
     end
 
-    set fields (string split \t $selection)
+    set fields (string split \t -- $selection)
 
     set item_id $fields[1]
     set item_title $fields[2]
@@ -111,12 +112,26 @@ function ssh-select
 
     set tmp_key "/tmp/op_ssh_key_$fish_pid"
 
-    op read "op://$vault_id/$item_id/private key" > $tmp_key
+    op item get "$item_id" --vault "$vault_id" --reveal --format json | \
+        jq -r '
+            .. | objects
+            | select(
+                (.id? == "private_key") or
+                (.label? == "private key") or
+                (.label? == "Private key")
+            )
+            | .value
+        ' | tr -d '\r' > $tmp_key
+
+    if test ! -s $tmp_key
+        echo "Error: private key not found"
+        rm -f $tmp_key
+        return 1
+    end
 
     chmod 600 $tmp_key
 
     ssh-add -t 1h $tmp_key
 
     rm -f $tmp_key
-
 end
