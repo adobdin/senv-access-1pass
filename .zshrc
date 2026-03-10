@@ -57,17 +57,20 @@ k-select() {
 
   raw_list+=$(
     op item list --tags k8s-config --format json |
-    jq -r '.[] | "\(.id)\t\(.title)\t\(.vault.name)\t\(.tags | join(","))"' |
-    sort -k2 -t$'\t'
+    jq -r '.[] | [.id, .title, .vault.name, (.tags|join(","))] | @tsv' |
+    sort -k2
   )
 
   local selection=$(echo "$raw_list" | fzf --tabstop=30 --header-lines=1 --reverse --inline-info)
 
   [[ -z "$selection" ]] && { set +o noglob; return 1; }
 
-  local item_id=$(echo "$selection" | cut -f1)
-  local item_title=$(echo "$selection" | cut -f2)
-  local vault_name=$(echo "$selection" | cut -f3)
+  local fields
+  IFS=$'\t' read -rA fields <<< "$selection"
+
+  local item_id="${fields[1]}"
+  local item_title="${fields[2]}"
+  local vault_name="${fields[3]}"
 
   printf "Loading config for: %s\n" "$item_title"
 
