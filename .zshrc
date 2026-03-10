@@ -53,50 +53,43 @@ k-select() {
   unsetopt nomatch
   set -o noglob
 
-  local raw_list=$'ID\tTITLE\tVAULT\tTAGS\n'
+  local item_id
 
-  raw_list+=$(
+  item_id=$(
     op item list --tags k8s-config --format json |
     jq -r '.[] | [.id, .title, .vault.name, (.tags|join(","))] | @tsv' |
-    sort -k2
+    sort -k2 |
+    fzf --delimiter=$'\t' --with-nth=2,3,4 --tabstop=30 --reverse --inline-info |
+    cut -f1
   )
 
-  local selection=$(echo "$raw_list" | fzf --tabstop=30 --header-lines=1 --reverse --inline-info)
+  [[ -z "$item_id" ]] && { set +o noglob; return 1; }
 
-  [[ -z "$selection" ]] && { set +o noglob; return 1; }
+  local item_title vault_name raw_data
 
-  local fields
-  IFS=$'\t' read -rA fields <<< "$selection"
-
-  local item_id="${fields[1]}"
-  local item_title="${fields[2]}"
-  local vault_name="${fields[3]}"
+  item_title=$(op item get "$item_id" --format json | jq -r '.title')
+  vault_name=$(op item get "$item_id" --format json | jq -r '.vault.name')
 
   printf "Loading config for: %s\n" "$item_title"
 
-  local raw_data
-
   raw_data=$(op read "op://$vault_name/$item_id/k8s config" 2>/dev/null)
 
-  if [[ -z "$raw_data" ]]; then
-    raw_data=$(op read "op://$vault_name/$item_id/text" 2>/dev/null)
-  fi
+  [[ -z "$raw_data" ]] && raw_data=$(op read "op://$vault_name/$item_id/text" 2>/dev/null)
 
   if [[ -z "$raw_data" ]]; then
-    local file_id=$(op item get "$item_id" --format json |
+    local file_id
+    file_id=$(op item get "$item_id" --format json |
       grep -oE '"files" ?: ?\[\{"id" ?: ?"[^"]+"' |
       cut -d'"' -f8)
 
-    if [[ -n "$file_id" ]]; then
-      raw_data=$(op read "op://$vault_name/$item_id/$file_id" 2>/dev/null)
-    fi
+    [[ -n "$file_id" ]] && raw_data=$(op read "op://$vault_name/$item_id/$file_id" 2>/dev/null)
   fi
 
-  if [[ -z "$raw_data" ]]; then
+  [[ -z "$raw_data" ]] && {
     printf "Error: Data not found in fields (k8s config, text) or files.\n"
     set +o noglob
     return 1
-  fi
+  }
 
   export KUBE_DATA_CACHE="$raw_data"
 
