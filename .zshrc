@@ -46,6 +46,7 @@ kns() {
 k-logout() {
   op signout
   unset KUBE_DATA_CACHE
+  unset K8S_CONTEXT_DISPLAY
   echo "Logged out and cache cleared."
 }
 
@@ -93,7 +94,7 @@ k-select() {
 
   export KUBE_DATA_CACHE="$raw_data"
 
-  export PS1="$item_title - $ORIGINAL_PS1"
+  export K8S_CONTEXT_DISPLAY="$item_title"
 
   printf "Success! Context set for: %s\n" "$item_title"
 
@@ -134,6 +135,7 @@ ctx() {
     kubectl --kubeconfig "$tmp" config use-context "$target" >/dev/null 2>&1
     KUBE_DATA_CACHE=$(kubectl --kubeconfig "$tmp" config view --raw)
     export KUBE_DATA_CACHE
+    export K8S_CONTEXT_DISPLAY="$target"
     printf "Switched to context: %s\n" "$target"
   fi
 
