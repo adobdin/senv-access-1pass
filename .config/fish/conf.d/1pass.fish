@@ -89,6 +89,40 @@ function k-select
 
 end
 
+function ctx
+
+    if test -z "$KUBE_DATA_CACHE"
+        echo "Error: No kubeconfig loaded. Run 'k-select' first."
+        return 1
+    end
+
+    set tmp (mktemp)
+
+    printf "%s\n" "$KUBE_DATA_CACHE" > $tmp
+
+    set current (kubectl --kubeconfig $tmp config current-context)
+
+    set contexts (kubectl --kubeconfig $tmp config get-contexts -o name)
+
+    set ordered (printf "%s\n%s\n" $current $contexts | awk '!seen[$0]++')
+
+    set target (printf "%s\n" $ordered | fzf \
+        --reverse \
+        --header "Select Cluster Context (current: $current)" \
+        --height 80% \
+        --preview "kubectl --kubeconfig $tmp config view --minify --context {}" \
+        --preview-window right:50%:wrap)
+
+    if test -n "$target"
+        kubectl --kubeconfig $tmp config use-context $target >/dev/null 2>&1
+        set -gx KUBE_DATA_CACHE (kubectl --kubeconfig $tmp config view --raw | string collect)
+        echo "Switched to context: $target"
+    end
+
+    rm -f $tmp
+
+end
+
 function ssh-select
 
     set selection (
