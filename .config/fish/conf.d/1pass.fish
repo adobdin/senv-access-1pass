@@ -47,22 +47,20 @@ end
 
 function k-select
 
-    set selection (
+    set item_id (
         op item list --tags k8s-config --format json |
         jq -r '.[] | [.id, .title, .vault.name, (.tags|join(","))] | @tsv' |
         sort -k2 |
-        fzf --delimiter='\t' --with-nth=2,3,4 --tabstop=30
+        fzf --delimiter='\t' --with-nth=2,3,4 --tabstop=30 |
+        cut -f1
     )
 
-    if test -z "$selection"
+    if test -z "$item_id"
         return
     end
 
-    set fields (string split \t $selection)
-
-    set item_id $fields[1]
-    set item_title $fields[2]
-    set vault_name $fields[3]
+    set item_title (op item get "$item_id" --format json | jq -r '.title')
+    set vault_name (op item get "$item_id" --format json | jq -r '.vault.name')
 
     printf "Loading config for: %s\n" "$item_title"
 
