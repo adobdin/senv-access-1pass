@@ -105,42 +105,45 @@ ssh-select() {
   unsetopt nomatch
   set -o noglob
 
-  local raw_list=$'ID\tTITLE\tVAULT\tTAGS\n'
+  local raw_list
+  raw_list=$'ID\tTITLE\tVAULT\n'
 
   raw_list+=$(
     op item list --tags ssh-key --format json |
-    jq -r '.[] | "\(.id)\t\(.title)\t\(.vault.name)\t\(.tags | join(","))"' |
+    jq -r '.[] | "\(.id)\t\(.title)\t\(.vault.name)"' |
     sort -k2 -t$'\t'
   )
 
-  local selection=$(echo "$raw_list" | fzf --reverse --inline-info --tabstop=30 --header-lines=1)
+  local selection
+  selection=$(printf "%s\n" "$raw_list" | \
+    fzf --reverse --inline-info --tabstop=30 --header-lines=1)
 
-  [[ -z "$selection" ]] && { set +o noglob; return 1; }
+  [[ -z "$selection" ]] && {
+    set +o noglob
+    setopt nomatch
+    return 1
+  }
 
-  local item_id=$(echo "$selection" | awk '{print $1}')
-  local item_title=$(op item get "$item_id" --format json | jq -r '.title')
+  local item_id
+  item_id=$(printf "%s\n" "$selection" | cut -f1)
 
-  local clean_title=$(echo "$item_title" | tr ' /' '__' | tr -cd '[:alnum:]_')
+  local item_title
+  item_title=$(printf "%s\n" "$selection" | cut -f2)
 
   echo "Adding key: $item_title"
 
-  local tmp_k="/tmp/${clean_title}"
-
   op item get "$item_id" --reveal --format json |
-    jq -r '.fields[] | select(.id=="private_key" or .label=="private key").value' > "$tmp_k"
-
-  if [[ ! -s "$tmp_k" ]]; then
-    echo "Error: Key not found"
-    rm -f "$tmp_k"
-    set +o noglob
-    return 1
-  fi
-
-  chmod 600 "$tmp_k"
-
-  ssh-add -t 1h "$tmp_k"
-
-  rm -f "$tmp_k"
+    jq -r '
+      .. | objects
+      | select(
+          (.id? == "private_key") or
+          (.label? == "private key") or
+          (.label? == "Private key")
+        )
+      | .value
+    ' |
+    tr -d '\r' |
+    ssh-add -t 1h -
 
   set +o noglob
   setopt nomatch
