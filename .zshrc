@@ -1,11 +1,5 @@
 [[ -z "$ORIGINAL_PS1" ]] && ORIGINAL_PS1="$PS1"
 
-############################################################
-# Kubernetes runtime config
-############################################################
-
-export KUBE_RUNTIME_CONFIG="/tmp/kube_runtime_config"
-
 (( $+aliases[k] )) && unalias k
 (( $+aliases[kctx] )) && unalias kctx
 (( $+aliases[kns] )) && unalias kns
@@ -52,7 +46,6 @@ kns() {
 k-logout() {
   op signout
   unset KUBE_DATA_CACHE
-  rm -f "$KUBE_RUNTIME_CONFIG"
   echo "Logged out and cache cleared."
 }
 
