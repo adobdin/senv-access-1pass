@@ -11,20 +11,43 @@ export KUBE_RUNTIME_CONFIG="/tmp/kube_runtime_config"
 (( $+aliases[kns] )) && unalias kns
 
 k() {
-  command kubectl "$@" --kubeconfig "$KUBE_RUNTIME_CONFIG"
+  local tmp
+  tmp=$(mktemp)
+
+  printf "%s\n" "$KUBE_DATA_CACHE" > "$tmp"
+
+  KUBECONFIG="$tmp" command kubectl "$@"
+  local rc=$?
+
+  rm -f "$tmp"
+  return $rc
 }
 
 kctx() {
-  KUBECONFIG="$KUBE_RUNTIME_CONFIG" command kubectx "$@"
+  local tmp
+  tmp=$(mktemp)
+
+  printf "%s\n" "$KUBE_DATA_CACHE" > "$tmp"
+
+  KUBECONFIG="$tmp" command kubectx "$@"
+  local rc=$?
+
+  rm -f "$tmp"
+  return $rc
 }
 
 kns() {
-  KUBECONFIG="$KUBE_RUNTIME_CONFIG" command kubens "$@"
-}
+  local tmp
+  tmp=$(mktemp)
 
-############################################################
-# logout
-############################################################
+  printf "%s\n" "$KUBE_DATA_CACHE" > "$tmp"
+
+  KUBECONFIG="$tmp" command kubens "$@"
+  local rc=$?
+
+  rm -f "$tmp"
+  return $rc
+}
 
 k-logout() {
   op signout
@@ -32,10 +55,6 @@ k-logout() {
   rm -f "$KUBE_RUNTIME_CONFIG"
   echo "Logged out and cache cleared."
 }
-
-############################################################
-# kubeconfig selector (1Password)
-############################################################
 
 k-select() {
   unsetopt nomatch
@@ -83,10 +102,7 @@ k-select() {
     return 1
   fi
 
-
   export KUBE_DATA_CACHE="$raw_data"
-
-  echo "$KUBE_DATA_CACHE" > "$KUBE_RUNTIME_CONFIG"
 
   export PS1="$item_title - $ORIGINAL_PS1"
 
@@ -95,10 +111,6 @@ k-select() {
   set +o noglob
   setopt nomatch
 }
-
-############################################################
-# SSH key selector (1Password)
-############################################################
 
 ssh-select() {
   unsetopt nomatch
