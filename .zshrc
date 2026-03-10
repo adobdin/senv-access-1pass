@@ -101,6 +101,45 @@ k-select() {
   setopt nomatch
 }
 
+ctx() {
+
+  if [[ -z "$KUBE_DATA_CACHE" ]]; then
+    printf "Error: No kubeconfig loaded. Run 'k-select' first.\n"
+    return 1
+  fi
+
+  local tmp
+  tmp=$(mktemp)
+
+  printf "%s\n" "$KUBE_DATA_CACHE" > "$tmp"
+
+  local current
+  current=$(kubectl --kubeconfig "$tmp" config current-context)
+
+  local contexts
+  contexts=$(kubectl --kubeconfig "$tmp" config get-contexts -o name)
+
+  local ordered
+  ordered=$(printf "%s\n%s\n" "$current" "$contexts" | awk '!seen[$0]++')
+
+  local target
+  target=$(echo "$ordered" | fzf \
+    --reverse \
+    --header "Select Cluster Context (current: $current)" \
+    --height 80% \
+    --preview "kubectl --kubeconfig $tmp config view --minify --context {}" \
+    --preview-window right:50%:wrap)
+
+  if [[ -n "$target" ]]; then
+    kubectl --kubeconfig "$tmp" config use-context "$target" >/dev/null 2>&1
+    KUBE_DATA_CACHE=$(kubectl --kubeconfig "$tmp" config view --raw)
+    export KUBE_DATA_CACHE
+    printf "Switched to context: %s\n" "$target"
+  fi
+
+  rm -f "$tmp"
+}
+
 ssh-select() {
   unsetopt nomatch
   set -o noglob
