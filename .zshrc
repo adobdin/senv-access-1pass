@@ -18,26 +18,36 @@ k() {
 }
 
 kctx() {
-  local tmp
+  local tmp rc
   tmp=$(mktemp)
 
   printf "%s\n" "$KUBE_DATA_CACHE" > "$tmp"
 
   KUBECONFIG="$tmp" command kubectx "$@"
-  local rc=$?
+  rc=$?
+
+  if [[ $rc -eq 0 ]]; then
+    KUBE_DATA_CACHE=$(cat "$tmp")
+    export KUBE_DATA_CACHE
+  fi
 
   rm -f "$tmp"
   return $rc
 }
 
 kns() {
-  local tmp
+  local tmp rc
   tmp=$(mktemp)
 
   printf "%s\n" "$KUBE_DATA_CACHE" > "$tmp"
 
   KUBECONFIG="$tmp" command kubens "$@"
-  local rc=$?
+  rc=$?
+
+  if [[ $rc -eq 0 ]]; then
+    KUBE_DATA_CACHE=$(cat "$tmp")
+    export KUBE_DATA_CACHE
+  fi
 
   rm -f "$tmp"
   return $rc
