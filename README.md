@@ -87,24 +87,22 @@ source ~/.zshrc
 
 KUBERNETES USAGE
 
-Run:
+1. Load Configuration:
+Run `k-select` to fetch a config from 1Password.
 
-k-select
+2. Switch Context (Multi-cluster support):
 
-An interactive list of Kubernetes configurations stored in 1Password will appear.
+If your config contains multiple clusters (e.g. Booking), run:
+`ctx`
+This provides an interactive `fzf` list of contexts with a live preview. Selecting one updates your environment and shell prompt.
 
-Select one and the script will load the kubeconfig into memory and create an alias:
+3. Execute Commands:
 
-k
-
-Example usage:
-
-k config view
-k get pods
-k get nodes
-k get pods -A
-
-The kubeconfig is never written to disk and is stored only in the environment variable:
+Use the `k` helper (wrapper for `kubectl`):
+`k config view`
+`k get pods`
+`k get nodes`
+`k get pods -A`
 
 KUBE_DATA_CACHE
 
@@ -118,8 +116,8 @@ k-logout
 
 This command:
 - signs out from 1Password CLI
-- clears the kubeconfig cache
-- removes the kubectl alias
+- clears the kubeconfig cache and prompt display
+- removes any active temporary files
 
 ---------------------------------------------------------------------
 
@@ -176,10 +174,10 @@ private key
 
 SECURITY NOTES
 
-- kubeconfig is stored only in memory
-- SSH keys are written to /tmp temporarily and removed immediately
-- ssh-agent lifetime is limited to 1 hour
-- secrets are always pulled directly from 1Password
+- Kubernetes: Configs are stored in memory and written to `/tmp` only for the duration of command execution using `mktemp` with restricted permissions.
+- SSH Keys: Private keys are piped directly to `ssh-agent` or written to `/tmp` temporarily and removed immediately.
+- Lifetime: SSH keys in `ssh-agent` are limited to 1 hour.
+- Zero Persistence: No secrets remain on disk after command execution or logout.
 
 ---------------------------------------------------------------------
 
