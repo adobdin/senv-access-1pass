@@ -192,3 +192,54 @@ k-logout() {
   op signout >/dev/null 2>&1
   printf "Logged out and selection cleared.\n"
 }
+
+ssh-select() {
+    local selection
+    selection="$(
+        op item list --tags ssh-key --format json |
+        jq -r '.[] | [.id, .title, .vault.id, .vault.name, (.tags | join(","))] | @tsv' |
+        sort -k2 |
+        fzf --delimiter=$'\t' --with-nth=2,4,5 --tabstop=30 --reverse --inline-info
+    )"
+
+    if [ -z "$selection" ]; then
+        return 1
+    fi
+
+    local item_id item_title vault_id
+    item_id="$(printf '%s\n' "$selection" | cut -f1)"
+    item_title="$(printf '%s\n' "$selection" | cut -f2)"
+    vault_id="$(printf '%s\n' "$selection" | cut -f3)"
+
+    echo "Adding key: $item_title"
+
+    local tmp_key
+    tmp_key="$(mktemp)" || return 1
+
+    cleanup() {
+        rm -f "$tmp_key"
+    }
+
+    trap cleanup EXIT INT TERM
+
+    op item get "$item_id" --vault "$vault_id" --reveal --format json |
+        jq -r '
+            .. | objects
+            | select(
+                (.id? == "private_key") or
+                (.label? == "private key") or
+                (.label? == "Private key")
+            )
+            | .value
+        ' |
+        tr -d '\r' > "$tmp_key"
+
+    if [ ! -s "$tmp_key" ]; then
+        echo "Error: private key not found" >&2
+        return 1
+    fi
+
+    chmod 600 "$tmp_key"
+
+    ssh-add -t 1h "$tmp_key"
+}
